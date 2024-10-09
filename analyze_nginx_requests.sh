@@ -8,13 +8,9 @@ LOG_FILE="/var/log/nginx/access.log"  # Path to the NGINX log file on the server
 # Define the path to your SSH private key
 SSH_KEY_PATH="~/.ssh/your_private_key.pem"  # Replace with the path to your private key
 
-# Define the Kong server IPs (the upstream servers)
-KONG_SERVER_1_IP="192.168.1.187"
-KONG_SERVER_2_IP="192.168.1.179"
-
-# Define the API endpoints you want to count
-ENDPOINT_1="/api/v1"
-ENDPOINT_2="/api/v2"
+# Define the upstream IPs you want to track
+UPSTREAM_SERVER_1_IP="10.187.208.62"
+UPSTREAM_SERVER_2_IP="10.188.208.62"
 
 # Define a file to store the timestamp of the last run
 TIMESTAMP_FILE="/tmp/nginx_last_run_timestamp.txt"
@@ -40,29 +36,18 @@ if [ ! -f /tmp/nginx_access.log ]; then
     exit 1
 fi
 
-# Count requests for each endpoint going through each Kong server
-echo "Analyzing the logs for requests to each endpoint on Kong servers..."
+# Count requests for each upstream server IP in the logs
+echo "Analyzing the logs for requests routed through each upstream server..."
 
-# For Kong server 1 (192.168.1.187)
-REQUESTS_TO_SERVER_1_ENDPOINT_1=$(grep "$KONG_SERVER_1_IP" /tmp/nginx_access.log | grep "$ENDPOINT_1" | wc -l)
-REQUESTS_TO_SERVER_1_ENDPOINT_2=$(grep "$KONG_SERVER_1_IP" /tmp/nginx_access.log | grep "$ENDPOINT_2" | wc -l)
+# For Upstream server 1 (10.187.208.62)
+REQUESTS_TO_SERVER_1=$(grep "$UPSTREAM_SERVER_1_IP" /tmp/nginx_access.log | wc -l)
 
-# For Kong server 2 (192.168.1.179)
-REQUESTS_TO_SERVER_2_ENDPOINT_1=$(grep "$KONG_SERVER_2_IP" /tmp/nginx_access.log | grep "$ENDPOINT_1" | wc -l)
-REQUESTS_TO_SERVER_2_ENDPOINT_2=$(grep "$KONG_SERVER_2_IP" /tmp/nginx_access.log | grep "$ENDPOINT_2" | wc -l)
+# For Upstream server 2 (10.188.208.62)
+REQUESTS_TO_SERVER_2=$(grep "$UPSTREAM_SERVER_2_IP" /tmp/nginx_access.log | wc -l)
 
 # Display the results
-echo "Requests sent to $ENDPOINT_1 on Kong server $KONG_SERVER_1_IP: $REQUESTS_TO_SERVER_1_ENDPOINT_1"
-echo "Requests sent to $ENDPOINT_1 on Kong server $KONG_SERVER_2_IP: $REQUESTS_TO_SERVER_2_ENDPOINT_1"
-echo "Requests sent to $ENDPOINT_2 on Kong server $KONG_SERVER_1_IP: $REQUESTS_TO_SERVER_1_ENDPOINT_2"
-echo "Requests sent to $ENDPOINT_2 on Kong server $KONG_SERVER_2_IP: $REQUESTS_TO_SERVER_2_ENDPOINT_2"
-
-# Optionally, calculate total requests for each endpoint across both servers
-TOTAL_REQUESTS_ENDPOINT_1=$(($REQUESTS_TO_SERVER_1_ENDPOINT_1 + $REQUESTS_TO_SERVER_2_ENDPOINT_1))
-TOTAL_REQUESTS_ENDPOINT_2=$(($REQUESTS_TO_SERVER_1_ENDPOINT_2 + $REQUESTS_TO_SERVER_2_ENDPOINT_2))
-
-echo "Total requests processed for $ENDPOINT_1: $TOTAL_REQUESTS_ENDPOINT_1"
-echo "Total requests processed for $ENDPOINT_2: $TOTAL_REQUESTS_ENDPOINT_2"
+echo "Requests routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1"
+echo "Requests routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2"
 
 # Update the timestamp file with the current timestamp for the next run
 CURRENT_TIMESTAMP=$(date +"%d/%b/%Y:%H:%M:%S")
@@ -71,3 +56,4 @@ echo "Updated timestamp for next run: $CURRENT_TIMESTAMP"
 
 # Cleanup local log file (optional)
 rm /tmp/nginx_access.log
+
