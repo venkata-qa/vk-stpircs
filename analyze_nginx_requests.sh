@@ -12,6 +12,10 @@ SSH_KEY_PATH="~/.ssh/your_private_key.pem"  # Replace with the path to your priv
 UPSTREAM_SERVER_1_IP="10.187.208.62"
 UPSTREAM_SERVER_2_IP="10.188.208.62"
 
+# Define the API endpoints you're testing
+API_1="/individuals/opencases"
+API_2="/individuals/deletecases"
+
 # Define a file to store the timestamp of the last run
 TIMESTAMP_FILE="/tmp/nginx_last_run_timestamp.txt"
 
@@ -39,18 +43,28 @@ if [ ! -f /tmp/nginx_access.log ]; then
     exit 1
 fi
 
-# Count requests for each upstream server IP in the logs
-echo "Analyzing the logs for requests routed through each upstream server..."
+# Count requests for each upstream server and API
 
 # For Upstream server 1 (10.187.208.62)
-REQUESTS_TO_SERVER_1=$(grep "$UPSTREAM_SERVER_1_IP" /tmp/nginx_access.log | wc -l)
+REQUESTS_TO_SERVER_1_API_1=$(grep "$UPSTREAM_SERVER_1_IP" /tmp/nginx_access.log | grep "$API_1" | wc -l)
+REQUESTS_TO_SERVER_1_API_2=$(grep "$UPSTREAM_SERVER_1_IP" /tmp/nginx_access.log | grep "$API_2" | wc -l)
 
 # For Upstream server 2 (10.188.208.62)
-REQUESTS_TO_SERVER_2=$(grep "$UPSTREAM_SERVER_2_IP" /tmp/nginx_access.log | wc -l)
+REQUESTS_TO_SERVER_2_API_1=$(grep "$UPSTREAM_SERVER_2_IP" /tmp/nginx_access.log | grep "$API_1" | wc -l)
+REQUESTS_TO_SERVER_2_API_2=$(grep "$UPSTREAM_SERVER_2_IP" /tmp/nginx_access.log | grep "$API_2" | wc -l)
+
+# Calculate total requests for each API
+TOTAL_REQUESTS_API_1=$(($REQUESTS_TO_SERVER_1_API_1 + $REQUESTS_TO_SERVER_2_API_1))
+TOTAL_REQUESTS_API_2=$(($REQUESTS_TO_SERVER_1_API_2 + $REQUESTS_TO_SERVER_2_API_2))
 
 # Display the results
-echo "Requests routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1"
-echo "Requests routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2"
+echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_1"
+echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_1"
+echo "Total requests for $API_1: $TOTAL_REQUESTS_API_1"
+
+echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_2"
+echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_2"
+echo "Total requests for $API_2: $TOTAL_REQUESTS_API_2"
 
 # Update the timestamp file with the current timestamp for the next run
 CURRENT_TIMESTAMP=$(date +"%d/%b/%Y:%H:%M:%S")
