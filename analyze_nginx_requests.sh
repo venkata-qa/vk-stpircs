@@ -57,13 +57,31 @@ REQUESTS_TO_SERVER_2_API_2=$(grep "$UPSTREAM_SERVER_2_IP" /tmp/nginx_access.log 
 TOTAL_REQUESTS_API_1=$(($REQUESTS_TO_SERVER_1_API_1 + $REQUESTS_TO_SERVER_2_API_1))
 TOTAL_REQUESTS_API_2=$(($REQUESTS_TO_SERVER_1_API_2 + $REQUESTS_TO_SERVER_2_API_2))
 
+# Calculate percentages for API 1
+if [ $TOTAL_REQUESTS_API_1 -gt 0 ]; then
+    PERCENTAGE_SERVER_1_API_1=$(echo "scale=2; $REQUESTS_TO_SERVER_1_API_1 / $TOTAL_REQUESTS_API_1 * 100" | bc)
+    PERCENTAGE_SERVER_2_API_1=$(echo "scale=2; $REQUESTS_TO_SERVER_2_API_1 / $TOTAL_REQUESTS_API_1 * 100" | bc)
+else
+    PERCENTAGE_SERVER_1_API_1=0
+    PERCENTAGE_SERVER_2_API_1=0
+fi
+
+# Calculate percentages for API 2
+if [ $TOTAL_REQUESTS_API_2 -gt 0 ]; then
+    PERCENTAGE_SERVER_1_API_2=$(echo "scale=2; $REQUESTS_TO_SERVER_1_API_2 / $TOTAL_REQUESTS_API_2 * 100" | bc)
+    PERCENTAGE_SERVER_2_API_2=$(echo "scale=2; $REQUESTS_TO_SERVER_2_API_2 / $TOTAL_REQUESTS_API_2 * 100" | bc)
+else
+    PERCENTAGE_SERVER_1_API_2=0
+    PERCENTAGE_SERVER_2_API_2=0
+fi
+
 # Display the results
-echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_1"
-echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_1"
+echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_1 ($PERCENTAGE_SERVER_1_API_1%)"
+echo "Requests for $API_1 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_1 ($PERCENTAGE_SERVER_2_API_1%)"
 echo "Total requests for $API_1: $TOTAL_REQUESTS_API_1"
 
-echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_2"
-echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_2"
+echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_1_IP: $REQUESTS_TO_SERVER_1_API_2 ($PERCENTAGE_SERVER_1_API_2%)"
+echo "Requests for $API_2 routed to upstream server $UPSTREAM_SERVER_2_IP: $REQUESTS_TO_SERVER_2_API_2 ($PERCENTAGE_SERVER_2_API_2%)"
 echo "Total requests for $API_2: $TOTAL_REQUESTS_API_2"
 
 # Update the timestamp file with the current timestamp for the next run
