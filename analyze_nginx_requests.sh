@@ -26,9 +26,12 @@ else
     echo "Last run timestamp: $LAST_RUN_TIMESTAMP"
 fi
 
-# SSH into NGINX server and retrieve logs after the last run timestamp
+# Convert the timestamp to match the log format (if necessary)
+FORMATTED_TIMESTAMP=$(echo "$LAST_RUN_TIMESTAMP" | sed 's/:/\\:/g')
+
+# SSH into NGINX server and retrieve logs after the last run timestamp using `grep`
 echo "Logging into NGINX server $NGINX_SERVER_IP and fetching logs after $LAST_RUN_TIMESTAMP..."
-ssh -i "$SSH_KEY_PATH" "$USER@$NGINX_SERVER_IP" "sed -n '/$LAST_RUN_TIMESTAMP/,\$p' $LOG_FILE" > /tmp/nginx_access.log
+ssh -i "$SSH_KEY_PATH" "$USER@$NGINX_SERVER_IP" "grep '$FORMATTED_TIMESTAMP' -A 10000 $LOG_FILE" > /tmp/nginx_access.log
 
 # Ensure the log file was fetched successfully
 if [ ! -f /tmp/nginx_access.log ]; then
@@ -56,4 +59,3 @@ echo "Updated timestamp for next run: $CURRENT_TIMESTAMP"
 
 # Cleanup local log file (optional)
 rm /tmp/nginx_access.log
-
