@@ -5,6 +5,9 @@ NGINX_SERVER_IP="your_nginx_server_ip"
 USER="ec2-user"  # Your SSH user
 LOG_FILE="/var/log/nginx/access.log"  # Path to the NGINX log file on the server
 
+# Define the path to your SSH private key
+SSH_KEY_PATH="~/.ssh/your_private_key.pem"  # Replace with the path to your private key
+
 # Define the Kong server IPs (the upstream servers)
 KONG_SERVER_1_IP="192.168.1.187"
 KONG_SERVER_2_IP="192.168.1.179"
@@ -29,7 +32,7 @@ fi
 
 # SSH into NGINX server and retrieve logs after the last run timestamp
 echo "Logging into NGINX server $NGINX_SERVER_IP and fetching logs after $LAST_RUN_TIMESTAMP..."
-ssh "$USER@$NGINX_SERVER_IP" "sed -n '/$LAST_RUN_TIMESTAMP/,\$p' $LOG_FILE" > /tmp/nginx_access.log
+ssh -i "$SSH_KEY_PATH" "$USER@$NGINX_SERVER_IP" "sed -n '/$LAST_RUN_TIMESTAMP/,\$p' $LOG_FILE" > /tmp/nginx_access.log
 
 # Ensure the log file was fetched successfully
 if [ ! -f /tmp/nginx_access.log ]; then
@@ -68,18 +71,3 @@ echo "Updated timestamp for next run: $CURRENT_TIMESTAMP"
 
 # Cleanup local log file (optional)
 rm /tmp/nginx_access.log
-
-
-
-
-Save the script to a file, for example, analyze_nginx_requests.sh.
-Make the script executable:
-bash
-Copy code
-chmod +x analyze_nginx_requests.sh
-Ensure you have SSH access to the NGINX server from the machine where you are running this script.
-Run the script:
-bash
-Copy code
-./analyze_nginx_requests.sh
-
