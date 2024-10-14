@@ -1,0 +1,87 @@
+default:
+  image: central-docker-remote.artifactory.alm.corp.hmrc.gov.uk/maven:latest
+  cache:
+    paths:
+      - .m2/repository
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=WARN -Dorg.slf4j.simpleLogger.showDateTime=true -Djava.awt.headless=true"
+  MAVEN_CLI_OPTS: "-s .CI/maven-settings.xml --batch-mode --errors --fail-at-end --show-version -DinstallAtEnd=true -DdeployAtEnd=true"
+  VALID_TEST_TYPES: "smoke load stress soak"  # List of valid test types
+
+stages:
+  - validate
+  - test
+
+# Validation Job to Check if TEST_TYPE is Valid
+validate_test_type:
+  stage: validate
+  script:
+    - |
+      if [[ -z "$TEST_TYPE" ]]; then
+        echo "Error: TEST_TYPE variable is not set."
+        exit 1
+      elif [[ ! " $VALID_TEST_TYPES " =~ " $TEST_TYPE " ]]; then
+        echo "Error: Invalid TEST_TYPE value '$TEST_TYPE'. Must be one of: $VALID_TEST_TYPES."
+        exit 1
+      else
+        echo "TEST_TYPE is valid: $TEST_TYPE"
+      fi
+  allow_failure: false  # If validation fails, all subsequent jobs will be canceled
+
+# Smoke Test Job - Always Runs Before Load, Stress, or Soak Tests
+smoke_test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS clean verify -Psmoke
+  artifacts:
+    paths:
+      - target/jmeter/results/smoke
+    expire_in: 4 week
+  rules:
+    - if: '$TEST_TYPE == "smoke" || $TEST_TYPE == "load" || $TEST_TYPE == "stress" || $TEST_TYPE == "soak"'
+  allow_failure: false  # If smoke test fails, the pipeline will stop
+  needs:
+    - validate_test_type  # Smoke test depends on validation
+
+# Load Test Job - Depends on Smoke Test Completion
+load_test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS clean verify -Pload
+  artifacts:
+    paths:
+      - target/jmeter/results/load
+  rules:
+    - if: '$TEST_TYPE == "load"'
+  needs:
+    - smoke_test  # Load test depends on smoke test completion
+  when: on_success  # Only run if smoke test succeeds
+
+# Stress Test Job - Depends on Smoke Test Completion
+stress_test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS clean verify -Pstress
+  artifacts:
+    paths:
+      - target/jmeter/results/stress
+  rules:
+    - if: '$TEST_TYPE == "stress"'
+  needs:
+    - smoke_test  # Stress test depends on smoke test completion
+  when: on_success  # Only run if smoke test succeeds
+
+# Soak Test Job - Depends on Smoke Test Completion
+soak_test:
+  stage: test
+  script:
+    - mvn $MAVEN_CLI_OPTS clean verify -Psoak
+  artifacts:
+    paths:
+      - target/jmeter/results/soak
+  rules:
+    - if: '$TEST_TYPE == "soak"'
+  needs:
+    - smoke_test  # Soak test depends on smoke test completion
+  when: on_success  # Only run if smoke test succeeds
