@@ -49,3 +49,58 @@
 - **Soak Testing**: Test for long-duration stability, aiming for **262 RPS** throughput, with **mean response times ≤90ms**, **95th percentile response times ≤1000ms**, and maintaining a low error rate (≤0.001%).
 
 - **Resource Monitoring**: Use external tools (e.g., **Prometheus, Grafana**) to track CPU and memory usage during load, stress, and soak tests, ensuring Kubernetes optimizes resource usage better than Docker Swarm.
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Testing Plan for Kubernetes
+
+| **Test Type**   | **Test Objective**                                                                                       | **JMeter Baseline Reference**                                                                                          | **Kubernetes Target**                                                                                 | **Test Status**        | **Additional Data to Collect**                                              |
+|-----------------|----------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|------------------------|------------------------------------------------------------------------------|
+| **Load Testing** | Validate that Kubernetes can handle expected load with acceptable response times and throughput.          | - **Throughput (Total)**: 267 RPS<br> - **Mean Response Time**: 138ms<br> - **95th Percentile Response Time**: 1055ms    | - **Throughput**: ≥ 267 RPS<br> - **Mean Response Time**: ≤ 130ms<br> - **95th Percentile**: ≤ 1000ms  | Pending/Passed/Failed  | - Resource Utilization (CPU, Memory)<br> - JMeter Throughput and Latency Data |
+| **Stress Testing** | Ensure that Kubernetes can handle maximum load and determine the system’s breaking point.                | - **Throughput (Total)**: 118 RPS<br> - **Mean Response Time**: 22ms<br> - **95th Percentile Response Time**: 40ms       | - **Throughput**: ≥ 118 RPS<br> - **Mean Response Time**: ≤ 20ms<br> - **95th Percentile**: ≤ 40ms    | Pending/Passed/Failed  | - Error Rate<br> - CPU and Memory at Peak Load                               |
+| **Soak Testing** | Test the stability of Kubernetes under sustained load over an extended period.                           | - **Throughput (Total)**: 262 RPS<br> - **Mean Response Time**: 94ms<br> - **95th Percentile Response Time**: 1042ms     | - **Throughput**: ≥ 262 RPS<br> - **Mean Response Time**: ≤ 90ms<br> - **95th Percentile**: ≤ 1000ms   | Pending/Passed/Failed  | - JMeter Results over Extended Duration<br> - Memory Usage Trends             |
+| **Latency Monitoring** | Measure internal and external latency at various loads to ensure minimal delays in response times.   | - **Load Test**: 23ms (min), 60s (max), 95th Percentile: 1055ms<br> - **Stress Test**: 12ms (min), 95th Percentile: 40ms | - **Load Test Min**: ≤ 20ms, **Max**: ≤ 55s<br> - **Stress Test Min**: ≤ 12ms, **Max**: ≤ 1s           | Pending/Passed/Failed  | - Latency at Different Load Levels<br> - Network Latency (Internal/External)  |
+| **Error Rate Testing** | Confirm that error rates remain within acceptable thresholds under all conditions.                  | - **Load Test Error Rate**: 0.00018%<br> - **Stress Test Error Rate**: 0%<br> - **Soak Test Error Rate**: 0.0002077%     | - **Error Rate ≤ 0.001%** under Load and Soak<br> - **Error Rate = 0%** under Stress                     | Pending/Passed/Failed  | - JMeter Failure Reports<br> - Error Response Codes Analysis                 |
+| **Concurrency Testing** | Test the system's ability to handle a high number of concurrent users and transactions.             | - **Max Concurrency in Stress Test**: 118 RPS (without errors)                                                         | - Handle at least **1500 concurrent users** with **no degradation** and sustain **118+ RPS**          | Pending/Passed/Failed  | - Concurrent Users vs Throughput<br> - Response Times under High Concurrency |
+| **Resource Utilization Monitoring** | Ensure that resource consumption (CPU, Memory) stays within acceptable limits under peak load. | - Resource data was not provided in JMeter reports, collect data using external monitoring tools (Prometheus, Grafana). | - **CPU Usage ≤ 80%**<br> - **Memory Usage ≤ 70%** during peak load                                     | Pending/Passed/Failed  | - CPU and Memory Usage<br> - Disk I/O and Network Bandwidth Utilization      |
+
+
+
+
+
+
+
+
+
+
+Explanation of the Columns:
+Test Type: The type of test being conducted (e.g., load, stress, soak, etc.).
+Test Objective: The specific goal or purpose of the test (what you're trying to measure or validate).
+JMeter Baseline Reference: Reference to the JMeter baselines from the Docker Swarm environment for comparison.
+Kubernetes Target: The expected performance target for Kubernetes, aiming to match or improve the Docker Swarm baselines.
+Test Status: Current status of the test (Pending, Passed, Failed). This will be updated as tests are performed.
+Additional Data to Collect: Any extra metrics that need to be captured during the tests, such as CPU usage, error rates, and latency.
+Data Collection:
+For each test type, you should be collecting:
+
+JMeter metrics (throughput, response times, error rates).
+External monitoring data for resource utilization (CPU, memory, disk I/O) using tools like Prometheus or Grafana.
+Detailed logs for error analysis (if any errors occur).
+This table provides a structured plan for testing Kubernetes performance based on the JMeter baselines from Docker Swarm, along with metrics you should collect during the process.
+
+
+
+
+
+
+
