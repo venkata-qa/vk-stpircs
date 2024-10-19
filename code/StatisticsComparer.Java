@@ -13,15 +13,18 @@ import java.util.Map;
 
 public class StatisticsComparer {
 
-    // A helper function to calculate the difference and determine status (Improved/Degraded)
-    private static String calculateDifferenceAndStatus(double oldVal, double newVal) {
-        double diff = newVal - oldVal;
-        if (diff < 0) {
-            return String.format("%.2f  Improved", diff);
-        } else if (diff > 0) {
-            return String.format("%.2f  Degraded", diff);
+    // A helper function to calculate the percentage difference
+    private static double calculatePercentageDifference(double oldVal, double newVal) {
+        if (oldVal == 0) return newVal * 100; // Avoid division by zero
+        return ((newVal - oldVal) / oldVal) * 100;
+    }
+
+    // A helper function to determine the status (Improved/Degraded) with special handling for sampleCount
+    private static String determineStatus(String metric, double percentageDiff) {
+        if (metric.equals("sampleCount")) {
+            return (percentageDiff >= 0) ? "Improved" : "Degraded"; // Sample count increase is always positive
         } else {
-            return String.format("%.2f  No Change", diff);
+            return (percentageDiff < 0) ? "Improved" : (percentageDiff > 0) ? "Degraded" : "No Change";
         }
     }
 
@@ -66,9 +69,9 @@ public class StatisticsComparer {
             }
 
             // Print the output in a tabular form
-            System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s\n", "Transaction", "Metric", "Baseline", "New", "Difference", "Status");
+            System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", "Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status");
             for (String[] result : comparisonResults) {
-                System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4], result[5]);
+                System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4], result[5], result[6]);
             }
 
             // Write the results to CSV
@@ -90,8 +93,20 @@ public class StatisticsComparer {
             if (oldTransactionStats.has(metricKey) && newTransactionStats.has(metricKey)) {
                 double oldValue = oldTransactionStats.get(metricKey).getAsDouble();
                 double newValue = newTransactionStats.get(metricKey).getAsDouble();
-                String diffStatus = calculateDifferenceAndStatus(oldValue, newValue);
-                String[] resultRow = {transactionName, metricKey, String.format("%.2f", oldValue), String.format("%.2f", newValue), diffStatus.split(" ")[0], diffStatus.split(" ")[1]};
+                double numericDifference = newValue - oldValue;
+                double percentageDiff = calculatePercentageDifference(oldValue, newValue);
+                String status = determineStatus(metricKey, percentageDiff);  // Adjusted status logic for sampleCount
+
+                String[] resultRow = {
+                    transactionName,
+                    metricKey,
+                    String.format("%.2f", oldValue),
+                    String.format("%.2f", newValue),
+                    String.format("%.2f", numericDifference),
+                    String.format("%.2f%%", percentageDiff),
+                    status
+                };
+
                 comparisonResults.add(resultRow);
             } else {
                 // Handle cases where the key might not be present in one of the JSON files
@@ -107,7 +122,7 @@ public class StatisticsComparer {
     private static void writeToCSV(List<String[]> comparisonResults, String outputFilePath) {
         try (CSVWriter writer = new CSVWriter(new FileWriter(outputFilePath))) {
             // Add header
-            writer.writeNext(new String[]{"Transaction", "Metric", "Baseline", "New", "Difference", "Status"});
+            writer.writeNext(new String[]{"Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status"});
             
             // Add data
             writer.writeAll(comparisonResults);
@@ -129,7 +144,8 @@ public class StatisticsComparer {
             headerRow.createCell(2).setCellValue("Baseline");
             headerRow.createCell(3).setCellValue("New");
             headerRow.createCell(4).setCellValue("Difference");
-            headerRow.createCell(5).setCellValue("Status");
+            headerRow.createCell(5).setCellValue("Percent Diff");
+            headerRow.createCell(6).setCellValue("Status");
 
             // Fill data rows
             int rowIdx = 1;
@@ -141,6 +157,7 @@ public class StatisticsComparer {
                 row.createCell(3).setCellValue(result[3]);
                 row.createCell(4).setCellValue(result[4]);
                 row.createCell(5).setCellValue(result[5]);
+                row.createCell(6).setCellValue(result[6]);
             }
 
             // Write the output to an Excel file
@@ -154,24 +171,3 @@ public class StatisticsComparer {
         }
     }
 }
-
-
-
-
-// <dependencies>
-//     <dependency>
-//         <groupId>com.google.code.gson</groupId>
-//         <artifactId>gson</artifactId>
-//         <version>2.8.8</version>
-//     </dependency>
-//     <dependency>
-//         <groupId>com.opencsv</groupId>
-//         <artifactId>opencsv</artifactId>
-//         <version>5.5.2</version>
-//     </dependency>
-//     <dependency>
-//         <groupId>org.apache.poi</groupId>
-//         <artifactId>poi-ooxml</artifactId>
-//         <version>5.2.2</version>
-//     </dependency>
-// </dependencies>
