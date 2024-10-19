@@ -1,4 +1,5 @@
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -19,10 +20,12 @@ public class StatisticsComparer {
         return ((newVal - oldVal) / oldVal) * 100;
     }
 
-    // A helper function to determine the status (Improved/Degraded) with special handling for sampleCount
+    // A helper function to determine the status (Improved/Degraded) with special handling for sampleCount, throughput, and data rates
     private static String determineStatus(String metric, double percentageDiff) {
-        if (metric.equals("sampleCount")) {
-            return (percentageDiff >= 0) ? "Improved" : "Degraded"; // Sample count increase is always positive
+        // Treat increases in sampleCount, throughput, receivedKBytesPerSec, and sentKBytesPerSec as positive
+        if (metric.equals("sampleCount") || metric.equals("throughput") || 
+            metric.equals("receivedKBytesPerSec") || metric.equals("sentKBytesPerSec")) {
+            return (percentageDiff >= 0) ? "Improved" : "Degraded"; // Increase is positive
         } else {
             return (percentageDiff < 0) ? "Improved" : (percentageDiff > 0) ? "Degraded" : "No Change";
         }
@@ -39,18 +42,25 @@ public class StatisticsComparer {
             JsonObject statsOld = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath1))), JsonObject.class);
             JsonObject statsNew = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath2))), JsonObject.class);
 
-            // Create a list to hold comparison results for each metric
-            List<String[]> comparisonResults = new ArrayList<>();
+            // Separate total summary and individual API results
+            List<String[]> totalSummaryResults = new ArrayList<>();
+            Map<String, List<String[]>> apiResults = new java.util.HashMap<>();
 
-            // Loop through each transaction in the JSON (e.g., POST_1847, POST_1973)
-            for (Map.Entry<String, JsonObject> entry : statsOld.entrySet()) {
+            // Loop through each transaction in the JSON (e.g., POST_1847, POST_1973, Total)
+            for (Map.Entry<String, JsonElement> entry : statsOld.entrySet()) {
                 String transactionName = entry.getKey();
-                
-                if (statsNew.has(transactionName)) {
-                    JsonObject oldTransactionStats = entry.getValue();
-                    JsonObject newTransactionStats = statsNew.getAsJsonObject(transactionName);
+                JsonElement oldTransactionStatsElement = entry.getValue();
 
-                    // Compare the common metrics for each transaction and store the results
+                if (statsNew.has(transactionName)) {
+                    JsonElement newTransactionStatsElement = statsNew.get(transactionName);
+
+                    // Assuming each transaction is a JsonObject, cast the elements to JsonObject
+                    JsonObject oldTransactionStats = oldTransactionStatsElement.getAsJsonObject();
+                    JsonObject newTransactionStats = newTransactionStatsElement.getAsJsonObject();
+
+                    // Store results in separate lists for total summary and APIs
+                    List<String[]> comparisonResults = new ArrayList<>();
+
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "sampleCount", comparisonResults);
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "errorCount", comparisonResults);
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "meanResTime", comparisonResults);
@@ -63,22 +73,32 @@ public class StatisticsComparer {
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "throughput", comparisonResults);
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "receivedKBytesPerSec", comparisonResults);
                     compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "sentKBytesPerSec", comparisonResults);
+
+                    // Handle "Total" separately from individual APIs
+                    if (transactionName.equalsIgnoreCase("Total")) {
+                        totalSummaryResults.addAll(comparisonResults);
+                    } else {
+                        apiResults.put(transactionName, comparisonResults);
+                    }
                 } else {
                     System.err.println("Warning: Transaction " + transactionName + " is missing in the new statistics file.");
                 }
             }
 
-            // Print the output in a tabular form
-            System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", "Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status");
-            for (String[] result : comparisonResults) {
-                System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4], result[5], result[6]);
+            // Print and write results for Total summary
+            System.out.println("==== Total Summary ====");
+            printResults(totalSummaryResults);
+            writeToCSV(totalSummaryResults, "total_summary_comparison.csv");
+
+            // Print and write results for each API
+            for (Map.Entry<String, List<String[]>> apiEntry : apiResults.entrySet()) {
+                String apiName = apiEntry.getKey();
+                List<String[]> apiComparisonResults = apiEntry.getValue();
+                
+                System.out.println("\n==== API: " + apiName + " ====");
+                printResults(apiComparisonResults);
+                writeToCSV(apiComparisonResults, apiName + "_comparison.csv");
             }
-
-            // Write the results to CSV
-            writeToCSV(comparisonResults, "comparison_report.csv");
-
-            // Write the results to Excel
-            writeToExcel(comparisonResults, "comparison_report.xlsx");
 
         } catch (Exception e) {
             // Log the detailed error message
@@ -95,7 +115,7 @@ public class StatisticsComparer {
                 double newValue = newTransactionStats.get(metricKey).getAsDouble();
                 double numericDifference = newValue - oldValue;
                 double percentageDiff = calculatePercentageDifference(oldValue, newValue);
-                String status = determineStatus(metricKey, percentageDiff);  // Adjusted status logic for sampleCount
+                String status = determineStatus(metricKey, percentageDiff);
 
                 String[] resultRow = {
                     transactionName,
@@ -118,6 +138,14 @@ public class StatisticsComparer {
         }
     }
 
+    // Method to print results in the console
+    private static void printResults(List<String[]> results) {
+        System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", "Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status");
+        for (String[] result : results) {
+            System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4], result[5], result[6]);
+        }
+    }
+
     // Method to write the comparison results into a CSV file
     private static void writeToCSV(List<String[]> comparisonResults, String outputFilePath) {
         try (CSVWriter writer = new CSVWriter(new FileWriter(outputFilePath))) {
@@ -128,45 +156,6 @@ public class StatisticsComparer {
             writer.writeAll(comparisonResults);
         } catch (IOException e) {
             System.err.println("Error writing CSV file: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    // Method to write the comparison results into an Excel file
-    private static void writeToExcel(List<String[]> comparisonResults, String outputFilePath) {
-        try (Workbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Comparison");
-
-            // Create header row
-            Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("Transaction");
-            headerRow.createCell(1).setCellValue("Metric");
-            headerRow.createCell(2).setCellValue("Baseline");
-            headerRow.createCell(3).setCellValue("New");
-            headerRow.createCell(4).setCellValue("Difference");
-            headerRow.createCell(5).setCellValue("Percent Diff");
-            headerRow.createCell(6).setCellValue("Status");
-
-            // Fill data rows
-            int rowIdx = 1;
-            for (String[] result : comparisonResults) {
-                Row row = sheet.createRow(rowIdx++);
-                row.createCell(0).setCellValue(result[0]);
-                row.createCell(1).setCellValue(result[1]);
-                row.createCell(2).setCellValue(result[2]);
-                row.createCell(3).setCellValue(result[3]);
-                row.createCell(4).setCellValue(result[4]);
-                row.createCell(5).setCellValue(result[5]);
-                row.createCell(6).setCellValue(result[6]);
-            }
-
-            // Write the output to an Excel file
-            try (FileOutputStream fileOut = new FileOutputStream(outputFilePath)) {
-                workbook.write(fileOut);
-            }
-
-        } catch (IOException e) {
-            System.err.println("Error writing Excel file: " + e.getMessage());
             e.printStackTrace();
         }
     }
