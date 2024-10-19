@@ -9,10 +9,11 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class StatisticsComparer {
 
-    // A simple helper function to calculate the difference and determine status (Improved/Degraded)
+    // A helper function to calculate the difference and determine status (Improved/Degraded)
     private static String calculateDifferenceAndStatus(double oldVal, double newVal) {
         double diff = newVal - oldVal;
         if (diff < 0) {
@@ -38,19 +39,36 @@ public class StatisticsComparer {
             // Create a list to hold comparison results for each metric
             List<String[]> comparisonResults = new ArrayList<>();
 
-            // Compare common metrics and store the results in comparisonResults list
-            compareAndStore(statsOld, statsNew, "Average Response Time (ms)", "meanResTime", comparisonResults);
-            compareAndStore(statsOld, statsNew, "Max Response Time (ms)", "maxResTime", comparisonResults);
-            compareAndStore(statsOld, statsNew, "95th Percentile Response Time (ms)", "pct1ResTime", comparisonResults);
-            compareAndStore(statsOld, statsNew, "99th Percentile Response Time (ms)", "pct2ResTime", comparisonResults);
-            compareAndStore(statsOld, statsNew, "Throughput (req/s)", "throughput", comparisonResults);
-            compareAndStore(statsOld, statsNew, "Error Rate (%)", "errorCount", comparisonResults);
-            compareAndStore(statsOld, statsNew, "Latency (ms)", "latency", comparisonResults);
+            // Loop through each transaction in the JSON (e.g., POST_1847, POST_1973)
+            for (Map.Entry<String, JsonObject> entry : statsOld.entrySet()) {
+                String transactionName = entry.getKey();
+                
+                if (statsNew.has(transactionName)) {
+                    JsonObject oldTransactionStats = entry.getValue();
+                    JsonObject newTransactionStats = statsNew.getAsJsonObject(transactionName);
+
+                    // Compare the common metrics for each transaction and store the results
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "sampleCount", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "errorCount", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "meanResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "medianResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "minResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "maxResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "pct1ResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "pct2ResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "pct3ResTime", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "throughput", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "receivedKBytesPerSec", comparisonResults);
+                    compareAndStore(transactionName, oldTransactionStats, newTransactionStats, "sentKBytesPerSec", comparisonResults);
+                } else {
+                    System.err.println("Warning: Transaction " + transactionName + " is missing in the new statistics file.");
+                }
+            }
 
             // Print the output in a tabular form
-            System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", "Metric", "Baseline", "New", "Difference", "Status");
+            System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s\n", "Transaction", "Metric", "Baseline", "New", "Difference", "Status");
             for (String[] result : comparisonResults) {
-                System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4]);
+                System.out.printf("%-25s%-35s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4], result[5]);
             }
 
             // Write the results to CSV
@@ -66,21 +84,21 @@ public class StatisticsComparer {
         }
     }
 
-    // Helper method to compare metrics between two statistics files and store the results
-    private static void compareAndStore(JsonObject statsOld, JsonObject statsNew, String metricName, String jsonKey, List<String[]> comparisonResults) {
+    // Helper method to compare metrics between two transactions and store the results
+    private static void compareAndStore(String transactionName, JsonObject oldTransactionStats, JsonObject newTransactionStats, String metricKey, List<String[]> comparisonResults) {
         try {
-            if (statsOld.has(jsonKey) && statsNew.has(jsonKey)) {
-                double oldValue = statsOld.get(jsonKey).getAsDouble();
-                double newValue = statsNew.get(jsonKey).getAsDouble();
+            if (oldTransactionStats.has(metricKey) && newTransactionStats.has(metricKey)) {
+                double oldValue = oldTransactionStats.get(metricKey).getAsDouble();
+                double newValue = newTransactionStats.get(metricKey).getAsDouble();
                 String diffStatus = calculateDifferenceAndStatus(oldValue, newValue);
-                String[] resultRow = {metricName, String.format("%.2f", oldValue), String.format("%.2f", newValue), diffStatus.split(" ")[0], diffStatus.split(" ")[1]};
+                String[] resultRow = {transactionName, metricKey, String.format("%.2f", oldValue), String.format("%.2f", newValue), diffStatus.split(" ")[0], diffStatus.split(" ")[1]};
                 comparisonResults.add(resultRow);
             } else {
                 // Handle cases where the key might not be present in one of the JSON files
-                System.err.println("Warning: Missing key '" + jsonKey + "' in one of the statistics.json files.");
+                System.err.println("Warning: Missing key '" + metricKey + "' for transaction '" + transactionName + "' in one of the statistics.json files.");
             }
         } catch (Exception e) {
-            System.err.println("Error comparing metric: " + metricName + " (" + jsonKey + ")");
+            System.err.println("Error comparing metric: " + metricKey + " for transaction: " + transactionName);
             e.printStackTrace();
         }
     }
@@ -89,7 +107,7 @@ public class StatisticsComparer {
     private static void writeToCSV(List<String[]> comparisonResults, String outputFilePath) {
         try (CSVWriter writer = new CSVWriter(new FileWriter(outputFilePath))) {
             // Add header
-            writer.writeNext(new String[]{"Metric", "Baseline", "New", "Difference", "Status"});
+            writer.writeNext(new String[]{"Transaction", "Metric", "Baseline", "New", "Difference", "Status"});
             
             // Add data
             writer.writeAll(comparisonResults);
@@ -106,11 +124,12 @@ public class StatisticsComparer {
 
             // Create header row
             Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("Metric");
-            headerRow.createCell(1).setCellValue("Baseline");
-            headerRow.createCell(2).setCellValue("New");
-            headerRow.createCell(3).setCellValue("Difference");
-            headerRow.createCell(4).setCellValue("Status");
+            headerRow.createCell(0).setCellValue("Transaction");
+            headerRow.createCell(1).setCellValue("Metric");
+            headerRow.createCell(2).setCellValue("Baseline");
+            headerRow.createCell(3).setCellValue("New");
+            headerRow.createCell(4).setCellValue("Difference");
+            headerRow.createCell(5).setCellValue("Status");
 
             // Fill data rows
             int rowIdx = 1;
@@ -121,6 +140,7 @@ public class StatisticsComparer {
                 row.createCell(2).setCellValue(result[2]);
                 row.createCell(3).setCellValue(result[3]);
                 row.createCell(4).setCellValue(result[4]);
+                row.createCell(5).setCellValue(result[5]);
             }
 
             // Write the output to an Excel file
@@ -134,7 +154,6 @@ public class StatisticsComparer {
         }
     }
 }
-
 
 
 
