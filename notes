@@ -1,0 +1,6 @@
+Summary:
+NFRs are the performance targets you expect the system to meet (e.g., max response time, acceptable CPU usage).
+Performance Metrics are the real-time measurements you collect from tools like JMeter and Grafana to verify if you're meeting your NFRs.
+Example NFR: "The system must handle 5000 RPS with an error rate below 1%."
+
+To validate this, you'll capture Throughput (RPS) and Error Rate using JMeter to ensure the system meets this requirement.
