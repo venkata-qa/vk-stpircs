@@ -1,0 +1,81 @@
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.File;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Optional;
+
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+public class StatisticsComparerTest {
+
+    private String reportsDirectory;
+    private String targetFilePath;
+    private String baselineFilePath;
+
+    @Before
+    public void setUp() throws Exception {
+        // Get the static part of the reports directory path for target directory
+        reportsDirectory = System.getProperty("reportsDirectory", "target/jmeter/reports");
+
+        // Use the static baseline file path
+        baselineFilePath = System.getProperty("baselineFile", "src/main/resources/baseline_statistics.json");
+
+        // Dynamically find the directory with the target statistics.json file using glob pattern
+        Optional<Path> dynamicSubDir = findTargetFile(reportsDirectory);
+        if (dynamicSubDir.isPresent()) {
+            targetFilePath = dynamicSubDir.get().toString();
+        } else {
+            throw new RuntimeException("No subdirectory with statistics.json found in: " + reportsDirectory);
+        }
+    }
+
+    @Test
+    public void testFilesExistAndAreNonEmpty() throws Exception {
+        // Check if baseline file exists and is not empty
+        checkFileExistsAndNonEmpty(baselineFilePath, "Baseline");
+
+        // Check if target statistics file exists and is not empty
+        checkFileExistsAndNonEmpty(targetFilePath, "Target");
+
+        // Load the files to ensure they're valid JSON
+        JsonObject baselineJson = loadJson(baselineFilePath);
+        JsonObject targetJson = loadJson(targetFilePath);
+
+        // Ensure the JSON objects are not null
+        assertNotNull("Baseline JSON should not be null", baselineJson);
+        assertNotNull("Target JSON should not be null", targetJson);
+    }
+
+    // Helper method to find the subdirectory with target statistics.json using glob pattern
+    private Optional<Path> findTargetFile(String baseDirPath) throws Exception {
+        Path baseDir = Paths.get(baseDirPath);
+
+        // Use glob pattern to find any subdirectory with statistics.json
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(baseDir, "*/*/statistics.json")) {
+            for (Path entry : stream) {
+                // Return the first match (target statistics.json)
+                return Optional.of(entry);
+            }
+        }
+        return Optional.empty();
+    }
+
+    // Helper method to check if a file exists and is non-empty
+    private void checkFileExistsAndNonEmpty(String filePath, String fileType) throws Exception {
+        assertTrue(fileType + " file does not exist: " + filePath, Files.exists(Paths.get(filePath)));
+        assertTrue(fileType + " file is empty: " + filePath, Files.size(Paths.get(filePath)) > 0);
+    }
+
+    // Helper method to load JSON files
+    private JsonObject loadJson(String filePath) throws Exception {
+        Gson gson = new Gson();
+        return gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath))), JsonObject.class);
+    }
+}
