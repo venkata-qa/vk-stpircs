@@ -24,91 +24,117 @@ public class StatisticsComparer {
         }
     }
 
-    public static void main(String[] args) throws IOException {
-        String filePath1 = "old_statistics.json"; // Path to the first statistics.json file (Baseline)
-        String filePath2 = "new_statistics.json"; // Path to the second statistics.json file (New)
+    public static void main(String[] args) {
+        try {
+            // Set the paths for the statistics.json files
+            String filePath1 = "old_statistics.json"; // Path to the first statistics.json file (Baseline)
+            String filePath2 = "new_statistics.json"; // Path to the second statistics.json file (New)
 
-        // Parse both statistics.json files into JSON objects
-        Gson gson = new Gson();
-        JsonObject statsOld = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath1))), JsonObject.class);
-        JsonObject statsNew = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath2))), JsonObject.class);
+            // Parse both statistics.json files into JSON objects
+            Gson gson = new Gson();
+            JsonObject statsOld = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath1))), JsonObject.class);
+            JsonObject statsNew = gson.fromJson(new String(Files.readAllBytes(Paths.get(filePath2))), JsonObject.class);
 
-        // Create a list to hold comparison results for each metric
-        List<String[]> comparisonResults = new ArrayList<>();
+            // Create a list to hold comparison results for each metric
+            List<String[]> comparisonResults = new ArrayList<>();
 
-        // Compare common metrics and store the results in comparisonResults list
-        compareAndStore(statsOld, statsNew, "Average Response Time (ms)", "meanResTime", comparisonResults);
-        compareAndStore(statsOld, statsNew, "Max Response Time (ms)", "maxResTime", comparisonResults);
-        compareAndStore(statsOld, statsNew, "95th Percentile Response Time (ms)", "pct1ResTime", comparisonResults);
-        compareAndStore(statsOld, statsNew, "99th Percentile Response Time (ms)", "pct2ResTime", comparisonResults);
-        compareAndStore(statsOld, statsNew, "Throughput (req/s)", "throughput", comparisonResults);
-        compareAndStore(statsOld, statsNew, "Error Rate (%)", "errorCount", comparisonResults);
-        compareAndStore(statsOld, statsNew, "Latency (ms)", "latency", comparisonResults);
+            // Compare common metrics and store the results in comparisonResults list
+            compareAndStore(statsOld, statsNew, "Average Response Time (ms)", "meanResTime", comparisonResults);
+            compareAndStore(statsOld, statsNew, "Max Response Time (ms)", "maxResTime", comparisonResults);
+            compareAndStore(statsOld, statsNew, "95th Percentile Response Time (ms)", "pct1ResTime", comparisonResults);
+            compareAndStore(statsOld, statsNew, "99th Percentile Response Time (ms)", "pct2ResTime", comparisonResults);
+            compareAndStore(statsOld, statsNew, "Throughput (req/s)", "throughput", comparisonResults);
+            compareAndStore(statsOld, statsNew, "Error Rate (%)", "errorCount", comparisonResults);
+            compareAndStore(statsOld, statsNew, "Latency (ms)", "latency", comparisonResults);
 
-        // Print the output in a tabular form
-        System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", "Metric", "Baseline", "New", "Difference", "Status");
-        for (String[] result : comparisonResults) {
-            System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4]);
+            // Print the output in a tabular form
+            System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", "Metric", "Baseline", "New", "Difference", "Status");
+            for (String[] result : comparisonResults) {
+                System.out.printf("%-35s%-12s%-12s%-12s%-12s\n", result[0], result[1], result[2], result[3], result[4]);
+            }
+
+            // Write the results to CSV
+            writeToCSV(comparisonResults, "comparison_report.csv");
+
+            // Write the results to Excel
+            writeToExcel(comparisonResults, "comparison_report.xlsx");
+
+        } catch (Exception e) {
+            // Log the detailed error message
+            System.err.println("Error in the main program: " + e.getMessage());
+            e.printStackTrace();
         }
-
-        // Write the results to CSV
-        writeToCSV(comparisonResults, "comparison_report.csv");
-
-        // Write the results to Excel
-        writeToExcel(comparisonResults, "comparison_report.xlsx");
     }
 
     // Helper method to compare metrics between two statistics files and store the results
     private static void compareAndStore(JsonObject statsOld, JsonObject statsNew, String metricName, String jsonKey, List<String[]> comparisonResults) {
-        double oldValue = statsOld.get(jsonKey).getAsDouble();
-        double newValue = statsNew.get(jsonKey).getAsDouble();
-        String diffStatus = calculateDifferenceAndStatus(oldValue, newValue);
-        String[] resultRow = {metricName, String.format("%.2f", oldValue), String.format("%.2f", newValue), diffStatus.split(" ")[0], diffStatus.split(" ")[1]};
-        comparisonResults.add(resultRow);
+        try {
+            if (statsOld.has(jsonKey) && statsNew.has(jsonKey)) {
+                double oldValue = statsOld.get(jsonKey).getAsDouble();
+                double newValue = statsNew.get(jsonKey).getAsDouble();
+                String diffStatus = calculateDifferenceAndStatus(oldValue, newValue);
+                String[] resultRow = {metricName, String.format("%.2f", oldValue), String.format("%.2f", newValue), diffStatus.split(" ")[0], diffStatus.split(" ")[1]};
+                comparisonResults.add(resultRow);
+            } else {
+                // Handle cases where the key might not be present in one of the JSON files
+                System.err.println("Warning: Missing key '" + jsonKey + "' in one of the statistics.json files.");
+            }
+        } catch (Exception e) {
+            System.err.println("Error comparing metric: " + metricName + " (" + jsonKey + ")");
+            e.printStackTrace();
+        }
     }
 
     // Method to write the comparison results into a CSV file
-    private static void writeToCSV(List<String[]> comparisonResults, String outputFilePath) throws IOException {
+    private static void writeToCSV(List<String[]> comparisonResults, String outputFilePath) {
         try (CSVWriter writer = new CSVWriter(new FileWriter(outputFilePath))) {
             // Add header
             writer.writeNext(new String[]{"Metric", "Baseline", "New", "Difference", "Status"});
             
             // Add data
             writer.writeAll(comparisonResults);
+        } catch (IOException e) {
+            System.err.println("Error writing CSV file: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
     // Method to write the comparison results into an Excel file
-    private static void writeToExcel(List<String[]> comparisonResults, String outputFilePath) throws IOException {
-        Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("Comparison");
+    private static void writeToExcel(List<String[]> comparisonResults, String outputFilePath) {
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Comparison");
 
-        // Create header row
-        Row headerRow = sheet.createRow(0);
-        headerRow.createCell(0).setCellValue("Metric");
-        headerRow.createCell(1).setCellValue("Baseline");
-        headerRow.createCell(2).setCellValue("New");
-        headerRow.createCell(3).setCellValue("Difference");
-        headerRow.createCell(4).setCellValue("Status");
+            // Create header row
+            Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("Metric");
+            headerRow.createCell(1).setCellValue("Baseline");
+            headerRow.createCell(2).setCellValue("New");
+            headerRow.createCell(3).setCellValue("Difference");
+            headerRow.createCell(4).setCellValue("Status");
 
-        // Fill data rows
-        int rowIdx = 1;
-        for (String[] result : comparisonResults) {
-            Row row = sheet.createRow(rowIdx++);
-            row.createCell(0).setCellValue(result[0]);
-            row.createCell(1).setCellValue(result[1]);
-            row.createCell(2).setCellValue(result[2]);
-            row.createCell(3).setCellValue(result[3]);
-            row.createCell(4).setCellValue(result[4]);
+            // Fill data rows
+            int rowIdx = 1;
+            for (String[] result : comparisonResults) {
+                Row row = sheet.createRow(rowIdx++);
+                row.createCell(0).setCellValue(result[0]);
+                row.createCell(1).setCellValue(result[1]);
+                row.createCell(2).setCellValue(result[2]);
+                row.createCell(3).setCellValue(result[3]);
+                row.createCell(4).setCellValue(result[4]);
+            }
+
+            // Write the output to an Excel file
+            try (FileOutputStream fileOut = new FileOutputStream(outputFilePath)) {
+                workbook.write(fileOut);
+            }
+
+        } catch (IOException e) {
+            System.err.println("Error writing Excel file: " + e.getMessage());
+            e.printStackTrace();
         }
-
-        // Write the output to an Excel file
-        try (FileOutputStream fileOut = new FileOutputStream(outputFilePath)) {
-            workbook.write(fileOut);
-        }
-        workbook.close();
     }
 }
+
 
 
 
