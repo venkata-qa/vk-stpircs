@@ -201,4 +201,77 @@ public class JmeterStatisticsComparer {
             return (percentageDiff < 0) ? "Improved" : (percentageDiff > 0) ? "Degraded" : "No Change";
         }
     }
+
+
+    // Existing CSV writing method remains unchanged
+
+    // Method to write the results to an Excel file in a dynamic directory based on "grp" and "testType"
+    private static void writeToExcel(List<String[]> results, String fileName, String grp, String testType) {
+        // Define the base directory for the Excel output
+        String baseDirectory = "perf-stats";  // This is at the project level
+        
+        // Define the dynamic path for the Excel output directory
+        String outputDirectory = baseDirectory + File.separator + grp + File.separator + testType;
+
+        // Create the directories if they don't exist
+        File directory = new File(outputDirectory);
+        if (!directory.exists()) {
+            directory.mkdirs();  // Create the necessary directories
+        }
+
+        // Full file path including directory and file name
+        String outputFilePath = outputDirectory + File.separator + fileName.replace(".csv", ".xlsx");
+
+        // Create Excel Workbook and Sheet
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Performance Results");
+
+        // Create Header Row
+        Row headerRow = sheet.createRow(0);
+        String[] header = {"Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status", "Definition"};
+        for (int i = 0; i < header.length; i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(header[i]);
+            cell.setCellStyle(createHeaderCellStyle(workbook));  // Optional: create header style
+        }
+
+        // Populate Data Rows
+        for (int i = 0; i < results.size(); i++) {
+            Row row = sheet.createRow(i + 1);  // Start after header
+            String[] rowData = results.get(i);
+            for (int j = 0; j < rowData.length; j++) {
+                row.createCell(j).setCellValue(rowData[j]);
+            }
+        }
+
+        // Auto-size all columns
+        for (int i = 0; i < header.length; i++) {
+            sheet.autoSizeColumn(i);
+        }
+
+        // Write the Excel file to disk
+        try (FileOutputStream fileOut = new FileOutputStream(outputFilePath)) {
+            workbook.write(fileOut);
+            System.out.println("Excel file written to: " + outputFilePath);
+        } catch (IOException e) {
+            System.err.println("Error writing Excel file: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        // Close the workbook
+        try {
+            workbook.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Optional: Create a header cell style for Excel
+    private static CellStyle createHeaderCellStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        style.setFont(font);
+        return style;
+    }
 }
