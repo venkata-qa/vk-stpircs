@@ -5,9 +5,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.opencsv.CSVWriter;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -15,9 +15,10 @@ import java.util.*;
 public class JmeterStatisticsComparer {
 
     // Add metric definitions (human-readable names and descriptions)
-    private static final Map<String, String> metricDefinitions = new HashMap<>();
+    private static final Map<String, String> metricDefinitions = new LinkedHashMap<>();
 
     static {
+        // Use LinkedHashMap to maintain the order of the metrics
         metricDefinitions.put("sampleCount", "Sample Count - The total number of requests. A higher number indicates more data collected and more reliable metrics.");
         metricDefinitions.put("errorCount", "Error Count - The number of failed requests. A lower number is better, indicating fewer errors.");
         metricDefinitions.put("meanResTime", "Mean Response Time (ms) - The average response time. A lower value is better as it indicates faster response.");
@@ -32,27 +33,24 @@ public class JmeterStatisticsComparer {
         metricDefinitions.put("sentKBytesPerSec", "Sent KBytes per Second - The amount of data sent per second. Can indicate load on the server, context dependent.");
     }
 
-    public static void runCompareStatistics(String baselinePath, String targetPath) {
+    public static void runCompareStatistics(String baselinePath, String targetPath, String grp, String testType) {
         try {
-            // Load the baseline statistics.json file from the resources folder (classpath)
-            InputStream baselineStream = JmeterStatisticsComparer.class.getClassLoader().getResourceAsStream("baselines/GRP1/load/baseline_statistics.json");
-            if (baselineStream == null) {
-                throw new RuntimeException("Baseline statistics file not found in classpath");
-            }
+            // Read the baseline statistics.json file
+            String baselineContent = new String(Files.readAllBytes(Paths.get(baselinePath)));
+            String targetContent = new String(Files.readAllBytes(Paths.get(targetPath)));
 
+            // Parse the JSON files
             Gson gson = new Gson();
-            JsonObject statsOld = gson.fromJson(new String(baselineStream.readAllBytes()), JsonObject.class);
-
-            // Load the new statistics.json file from target/jmeter/reports/statistics.json
-            JsonObject statsNew = gson.fromJson(new String(Files.readAllBytes(Paths.get(targetPath))), JsonObject.class);
+            JsonObject statsOld = gson.fromJson(baselineContent, JsonObject.class);
+            JsonObject statsNew = gson.fromJson(targetContent, JsonObject.class);
 
             // Separate total summary and individual API results
             List<String[]> totalSummaryResults = new ArrayList<>();
             Map<String, List<String[]>> apiResults = processStatistics(statsOld, statsNew, totalSummaryResults);
 
             // Output total summary and each API's results
-            outputResults("Total Summary", totalSummaryResults, "total_summary_comparison.csv");
-            outputApiResults(apiResults);
+            outputResults("Total Summary", totalSummaryResults, "total_summary_comparison.csv", grp, testType);
+            outputApiResults(apiResults, grp, testType);
 
         } catch (Exception e) {
             System.err.println("Error in the main program: " + e.getMessage());
@@ -92,7 +90,7 @@ public class JmeterStatisticsComparer {
     private static List<String[]> compareTransaction(String transactionName, JsonObject oldStats, JsonObject newStats) {
         List<String[]> comparisonResults = new ArrayList<>();
 
-        // Compare all relevant metrics
+        // Compare all relevant metrics in the fixed order defined by metricDefinitions
         for (String metricKey : metricDefinitions.keySet()) {
             compareAndStore(transactionName, oldStats, newStats, metricKey, comparisonResults);
         }
@@ -112,7 +110,7 @@ public class JmeterStatisticsComparer {
 
                 comparisonResults.add(new String[]{
                         transactionName,
-                        metricDefinitions.getOrDefault(metricKey, metricKey), // Map to human-readable name
+                        metricKey, // Only the metric name goes here
                         String.format("%.2f", oldValue),
                         String.format("%.2f", newValue),
                         String.format("%.2f", numericDifference),
@@ -130,19 +128,20 @@ public class JmeterStatisticsComparer {
     }
 
     // Method to output total summary or individual API results to console and CSV
-    private static void outputResults(String header, List<String[]> results, String csvFileName) {
+    private static void outputResults(String header, List<String[]> results, String csvFileName, String grp, String testType) {
         System.out.println("==== " + header + " ====");
         printResults(results);
-        writeToCSV(results, csvFileName);
+        printConfluenceTable(results); // Print in Confluence format
+        writeToCSV(results, csvFileName, grp, testType);
     }
 
     // Method to handle the output of API results
-    private static void outputApiResults(Map<String, List<String[]>> apiResults) {
+    private static void outputApiResults(Map<String, List<String[]>> apiResults, String grp, String testType) {
         for (Map.Entry<String, List<String[]>> apiEntry : apiResults.entrySet()) {
             String apiName = apiEntry.getKey();
             List<String[]> apiComparisonResults = apiEntry.getValue();
 
-            outputResults("API: " + apiName, apiComparisonResults, apiName + "_comparison.csv");
+            outputResults("API: " + apiName, apiComparisonResults, apiName + "_comparison.csv", grp, testType);
         }
     }
 
@@ -154,8 +153,30 @@ public class JmeterStatisticsComparer {
         }
     }
 
-    // Method to write the results to a CSV file
-    private static void writeToCSV(List<String[]> results, String outputFilePath) {
+    // Method to print the results in Confluence table format
+    private static void printConfluenceTable(List<String[]> results) {
+        // Print header in Confluence format
+        System.out.println("|| Transaction || Metric || Baseline || New || Difference || Percent Diff || Status || Definition ||");
+        for (String[] result : results) {
+            System.out.printf("| %s | %s | %s | %s | %s | %s | %s | %s |\n", result[0], result[1], result[2], result[3], result[4], result[5], result[6], result[7]);
+        }
+    }
+
+    // Method to write the results to a CSV file in a specific directory with dynamic "grp" and "testType"
+    private static void writeToCSV(List<String[]> results, String fileName, String grp, String testType) {
+        // Define the dynamic path for the CSV output directory
+        String outputDirectory = "src/test/resources/compare-results/" + grp + "/" + testType;
+
+        // Create the directories if they don't exist
+        File directory = new File(outputDirectory);
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+
+        // Full file path including directory
+        String outputFilePath = outputDirectory + "/" + fileName;
+
+        // Write the CSV file
         try (CSVWriter writer = new CSVWriter(new FileWriter(outputFilePath))) {
             writer.writeNext(new String[]{"Transaction", "Metric", "Baseline", "New", "Difference", "Percent Diff", "Status", "Definition"});
             writer.writeAll(results);
