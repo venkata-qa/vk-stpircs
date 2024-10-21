@@ -41,6 +41,27 @@
             <version>4.13.2</version>
             <scope>test</scope>
         </dependency>
+
+                 <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>5.2.2</version> <!-- Latest version -->
+    </dependency>
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi</artifactId>
+        <version>5.2.2</version> <!-- Latest version -->
+    </dependency>
+    <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml-schemas</artifactId>
+        <version>5.2.2</version> <!-- Latest version -->
+    </dependency>
+    <dependency>
+        <groupId>org.apache.xmlbeans</groupId>
+        <artifactId>xmlbeans</artifactId>
+        <version>5.1.1</version> <!-- Required for .xlsx format -->
+    </dependency>
     </dependencies>
 
     <build>
