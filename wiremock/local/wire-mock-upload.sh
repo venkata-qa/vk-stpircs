@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Dynamically determine the base directory of the project
+BASE_DIR=$(cd "$(dirname "$0")/../../../.." && pwd)
+
+# Define paths relative to the base directory
+MOCKS_DIR="$BASE_DIR/src/test/resources/mocks"
+MAPPINGS_DIR="$MOCKS_DIR/mappings/"
+FILES_DIR="$MOCKS_DIR/__files/"
+SERVERS_FILE="$MOCKS_DIR/scripts/wiremock_servers.json"
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 MAPPINGS_DIR="$SCRIPT_DIR/mocks/mappings/"
 FILES_DIR="$SCRIPT_DIR/mocks/__files/"
