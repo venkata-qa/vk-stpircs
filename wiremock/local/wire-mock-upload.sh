@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+MAPPINGS_DIR="$SCRIPT_DIR/mocks/mappings/"
+FILES_DIR="$SCRIPT_DIR/mocks/__files/"
+
 SERVERS_FILE="wiremock_servers.json"
 MAPPINGS_DIR="mocks/mappings/"
 FILES_DIR="mocks/__files/"
