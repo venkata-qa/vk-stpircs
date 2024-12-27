@@ -33,6 +33,23 @@ for server in $servers; do
   # Move files from the temporary directory to the final destination with sudo
   echo "Moving files to /home/ec2-user/wiremock/ on $HOST..."
   ssh "${USER}@${HOST}" "
+
+  ssh "${USER}@${HOST}" "
+  if [ ! -d /home/ec2-user/wiremock/mappings ]; then
+    echo 'Creating mappings directory...'
+    sudo mkdir -p /home/ec2-user/wiremock/mappings
+  fi
+
+  if [ ! -d /home/ec2-user/wiremock/__files ]; then
+    echo 'Creating __files directory...'
+    sudo mkdir -p /home/ec2-user/wiremock/__files
+  fi
+
+  sudo mv -f ${TMP_DIR}/mappings/* /home/ec2-user/wiremock/mappings/ &&
+  sudo mv -f ${TMP_DIR}/__files/* /home/ec2-user/wiremock/__files/ &&
+  sudo rm -rf ${TMP_DIR}
+"
+
     sudo mkdir -p /home/ec2-user/wiremock/mappings /home/ec2-user/wiremock/__files &&
     sudo mv ${TMP_DIR}/mappings/* /home/ec2-user/wiremock/mappings/ &&
     sudo mv ${TMP_DIR}/__files/* /home/ec2-user/wiremock/__files/ &&
