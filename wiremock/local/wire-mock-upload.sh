@@ -3,6 +3,17 @@
 # Dynamically determine the base directory of the project
 BASE_DIR=$(cd "$(dirname "$0")/../../../.." && pwd)
 
+# User's home directory
+USER_HOME=$(eval echo "~$USER")
+
+# Project name (adjust this to your Maven project name)
+PROJECT_NAME="perf-test-automation"
+
+# Dynamically determine the base directory
+BASE_DIR="$USER_HOME/$PROJECT_NAME"
+
+
+
 # Define paths relative to the base directory
 MOCKS_DIR="$BASE_DIR/src/test/resources/mocks"
 MAPPINGS_DIR="$MOCKS_DIR/mappings/"
