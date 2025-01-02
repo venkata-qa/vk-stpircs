@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+    options {
+        skipDefaultCheckout(true)
+    }
+    parameters {
+        string(name: 'checkout_branch', defaultValue: 'main', description: 'Branch to checkout')
+        choice(name: 'env_name', choices: ['ist', 'cit'], description: 'Environment of Wiremock')
+        choice(name: 'iteration', choices: ['01', '02', '03'], description: 'Tier of Wiremock')
+    }
+    environment {
+        AWS_REGION = 'eu-west-2'
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                script {
+                    checkout([$class: 'GitSCM', 
+                        branches: [[name: "*/${params.checkout_branch}"]],
+                        userRemoteConfigs: [[
+                            url: 'https://github.com/your-repository.git',
+                            credentialsId: 'your-credentials-id'
+                        ]]
+                    ])
+                }
+            }
+        }
+        stage('Upload Files to Wiremock') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'nonprod-ec2-user-key', keyFileVariable: 'EC2_USER_KEY')]) {
+                        def ip_address = sh(script: """
+                            aws ec2 describe-instances \
+                            --filter Name=tag:Name,Values=*if_${params.env_name}${params.iteration}_wiremock \
+                            --query 'Reservations[*].Instances[*].PrivateIpAddress' \
+                            --region ${env.AWS_REGION} --output text
+                        """, returnStdout: true).trim()
+
+                        sh """
+                            scp -r -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null src/test/resources/mocks/* ec2-user@${ip_address}:/home/ec2-user/
+                            ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${ip_address} 'sudo cp -rf /home/ec2-user/mappings /home/ec2-user/wiremocks/'
+                            ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${ip_address} 'sudo cp -rf /home/ec2-user/__files /home/ec2-user/wiremocks/'
+                        """
+                    }
+                }
+            }
+        }
+        stage('Restart Wiremock') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'nonprod-ec2-user-key', keyFileVariable: 'EC2_USER_KEY')]) {
+                        def ip_address = sh(script: """
+                            aws ec2 describe-instances \
+                            --filter Name=tag:Name,Values=*if_${params.env_name}${params.iteration}_wiremock \
+                            --query 'Reservations[*].Instances[*].PrivateIpAddress' \
+                            --region ${env.AWS_REGION} --output text
+                        """, returnStdout: true).trim()
+
+                        sh """
+                            ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${ip_address} 'sudo systemctl restart wiremock'
+                        """
+                    }
+                }
+            }
+        }
+        stage('Verify Wiremock') {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'nonprod-ec2-user-key', keyFileVariable: 'EC2_USER_KEY')]) {
+                        def ip_address = sh(script: """
+                            aws ec2 describe-instances \
+                            --filter Name=tag:Name,Values=*if_${params.env_name}${params.iteration}_wiremock \
+                            --query 'Reservations[*].Instances[*].PrivateIpAddress' \
+                            --region ${env.AWS_REGION} --output text
+                        """, returnStdout: true).trim()
+
+                        def wiremockStatus = sh(script: """
+                            curl -s -o /dev/null -w "%{http_code}" http://${ip_address}:8080/__admin
+                        """, returnStdout: true).trim()
+
+                        if (wiremockStatus != "200") {
+                            error "Wiremock is not responding. Status code: ${wiremockStatus}"
+                        }
+
+                        echo "Wiremock is up and running."
+                    }
+                }
+            }
+        }
+    }
+}
