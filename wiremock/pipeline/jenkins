@@ -1,0 +1,51 @@
+import static groovy.json.JsonOutput.*
+
+@NonCPS
+def jsonParse(def json) {
+    new groovy.json.JsonSlurperClassic().parseText(json)
+}
+
+
+
+    pipeline {
+        agent { label "dev" }
+        parameters {
+            choice(name: 'env_name', choices: ["ist","cit"] , description: 'env of wiremock')     
+            choice(name: 'iteration', choices: ["09","01","02","03","04","05","06","07","08","09"] , description: 'tier of wiremock')     
+            string(name: 'perf_branch', defaultValue: "mock-setup", description: 'performance-test-automation branch')
+            
+        }
+        
+        stages {
+            stage("Checkout") {
+                steps {
+                    checkout([$class: 'GitSCM', branches: [[name: perf_branch ]], userRemoteConfigs: [[url: "https://gitlab.alm.corp.hmrc.gov.uk/aps-eis-infra/if-ipaas-migration/qualityassurance/performance-test-automation.git", credentialsId: 'almgit-pull-token']]])
+                }
+            }
+           
+stage('upload files') {
+                steps {
+                    script {
+                         currentBuild.displayName = "${env_name}${iteration}-wiremock-upload"
+                         withCredentials([sshUserPrivateKey(credentialsId: "nonprod-ec2-user-key", keyFileVariable: 'EC2_USER_KEY')]) {
+                                    sh '''
+                                    ip_address=$(aws ec2 describe-instances --filter Name=tag:Name,Values=*if_"$env_name$iteration"_wiremock --query 'Reservations[*].Instances[*].{InstanceId:PrivateIpAddress,Tags:Tags[?Key == `Name`] | [0].Value}' --region eu-west-2 | awk -F: '/InstanceId/ { gsub(/[" ,]+/, ""); ip_address=$2 }; END { print ip_address }')
+                                    ls -ltr
+                                    scp -r -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null src/test/resources/mocks/* ec2-user@$ip_address:/home/ec2-user/
+                                    ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@$ip_address sudo cp -rf /home/ec2-user/mappings /home/ec2-user/wiremocks/ 
+                                    ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@$ip_address sudo cp -rf /home/ec2-user/__files /home/ec2-user/wiremocks/
+                                    ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@$ip_address sudo systemctl restart wiremock
+                                    '''
+                                    }
+                                   
+                    }
+                }
+            }
+           
+           
+
+            
+            
+        }
+     
+    }
