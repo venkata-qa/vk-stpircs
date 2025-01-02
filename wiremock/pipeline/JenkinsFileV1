@@ -145,3 +145,29 @@ def verifyWiremock(String dnsName) {
 
     error "Wiremock did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
 }
+def verifyWiremock(String dnsName) {
+    echo "Verifying Wiremock on server ${dnsName} using localhost..."
+    int maxRetries = 5
+    int retryDelay = 5 // seconds
+    int attempt = 0
+    String wiremockStatus = ""
+
+    while (attempt < maxRetries) {
+        attempt++
+        wiremockStatus = sh(script: """
+            ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} << 'EOF'
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/__admin
+            EOF
+        """, returnStdout: true).trim()
+        
+        if (wiremockStatus == "200") {
+            echo "Wiremock is up and running."
+            return
+        }
+
+        echo "Attempt ${attempt} failed with status code: ${wiremockStatus}. Retrying in ${retryDelay} seconds..."
+        sleep(retryDelay)
+    }
+
+    error "Wiremock did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
+}
