@@ -120,9 +120,9 @@ def verifyWiremock(String dnsName) {
 }
 
 
-
 def verifyWiremock(String dnsName) {
-    echo "Verifying Wiremock on DNS: ${dnsName}"
+    echo "Verifying Wiremock mappings endpoint on server ${dnsName} using localhost..."
+
     int maxRetries = 5
     int retryDelay = 5 // seconds
     int attempt = 0
@@ -130,44 +130,31 @@ def verifyWiremock(String dnsName) {
 
     while (attempt < maxRetries) {
         attempt++
-        wiremockStatus = sh(script: """
-            curl -s -o /dev/null -w "%{http_code}" http://${dnsName}:8080/__admin
-        """, returnStdout: true).trim()
-        
-        if (wiremockStatus == "200") {
-            echo "Wiremock is up and running."
-            return
+
+        echo "Attempt ${attempt}: Checking Wiremock mappings endpoint..."
+        try {
+            wiremockStatus = sh(script: """
+                ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} \
+                "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/__admin/mappings || echo ERROR"
+            """, returnStdout: true).trim()
+
+            echo "Wiremock Mappings Status Code: ${wiremockStatus}"
+
+            // Check for successful status code
+            if (wiremockStatus == "200") {
+                echo "Wiremock mappings endpoint is reachable and responding."
+                return
+            } else if (wiremockStatus == "ERROR") {
+                echo "Curl command failed to execute on the server."
+            }
+        } catch (Exception e) {
+            echo "Exception occurred during SSH or curl execution: ${e.getMessage()}"
         }
 
-        echo "Attempt ${attempt} failed with status code: ${wiremockStatus}. Retrying in ${retryDelay} seconds..."
+        echo "Attempt ${attempt} failed. Retrying in ${retryDelay} seconds..."
         sleep(retryDelay)
     }
 
-    error "Wiremock did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
+    error "Wiremock mappings endpoint did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
 }
-def verifyWiremock(String dnsName) {
-    echo "Verifying Wiremock on server ${dnsName} using localhost..."
-    int maxRetries = 5
-    int retryDelay = 5 // seconds
-    int attempt = 0
-    String wiremockStatus = ""
 
-    while (attempt < maxRetries) {
-        attempt++
-        wiremockStatus = sh(script: """
-            ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} << 'EOF'
-            curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/__admin
-            EOF
-        """, returnStdout: true).trim()
-        
-        if (wiremockStatus == "200") {
-            echo "Wiremock is up and running."
-            return
-        }
-
-        echo "Attempt ${attempt} failed with status code: ${wiremockStatus}. Retrying in ${retryDelay} seconds..."
-        sleep(retryDelay)
-    }
-
-    error "Wiremock did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
-}
