@@ -1,0 +1,147 @@
+pipeline {
+    agent { label "dev" }
+    options {
+        skipDefaultCheckout(true)
+    }
+    parameters {
+        choice(name: 'env_name', choices: ["ist", "cit"], description: 'Environment of Wiremock')
+        choice(name: 'iteration', choices: ["01", "02", "03", "04", "05", "06", "07", "08", "09"], description: 'Tier of Wiremock')
+        string(name: 'perf_branch', defaultValue: "main", description: 'Performance-test-automation branch')
+    }
+    environment {
+        AWS_REGION = 'eu-west-2'
+    }
+    stages {
+        stage("Checkout") {
+            steps {
+                script {
+                    echo "Checking out branch: ${params.perf_branch}"
+                }
+                checkout([$class: 'GitSCM', branches: [[name: params.perf_branch ]], userRemoteConfigs: [[
+                    url: "https://gitlab.alm.corp.hmrc.gov.uk/aps-eis-infra/if-ipaas-migration/qualityassurance/performance-test-automation.git",
+                    credentialsId: 'almgit-pull-token'
+                ]]])
+            }
+        }
+        stage("Upload Mocks to Wiremock Server") {
+            steps {
+                script {
+                    currentBuild.displayName = "${params.env_name}${params.iteration}-wiremock-upload"
+                    withCredentials([sshUserPrivateKey(credentialsId: "nonprod-ec2-user-key", keyFileVariable: 'EC2_USER_KEY')]) {
+                        def dnsName = getWiremockDNSName()
+                        def ipAddress = getWiremockIPAddress()
+                        echo "Using DNS: ${dnsName}"
+                        echo "Resolved IP: ${ipAddress}"
+                        uploadMocks(dnsName)
+                    }
+                }
+            }
+        }
+        stage("Restart Wiremock Server") {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: "nonprod-ec2-user-key", keyFileVariable: 'EC2_USER_KEY')]) {
+                        def dnsName = getWiremockDNSName()
+                        restartWiremock(dnsName)
+                    }
+                }
+            }
+        }
+        stage("Verify Wiremock Server Mappings") {
+            steps {
+                script {
+                    withCredentials([sshUserPrivateKey(credentialsId: "nonprod-ec2-user-key", keyFileVariable: 'EC2_USER_KEY')]) {
+                        def dnsName = getWiremockDNSName()
+                        verifyWiremock(dnsName)
+                    }
+                }
+            }
+        }
+    }
+}
+
+def getWiremockDNSName() {
+    return "wiremock-external.${params.env_name}${params.iteration}.if.n.mes.corp.hmrc.gov.uk"
+}
+
+def getWiremockIPAddress() {
+    def command = """
+        aws ec2 describe-instances \
+        --filter Name=tag:Name,Values=${env.INSTANCE_FILTER} \
+        --query 'Reservations[*].Instances[*].PrivateIpAddress' \
+        --region ${env.AWS_REGION} --output text
+    """
+    return sh(script: command, returnStdout: true).trim()
+}
+
+def uploadMocks(String dnsName) {
+    echo "Starting mock files upload to DNS: ${dnsName}"
+
+    sh """
+        echo "Ensuring the temp_wiremocks directory exists on the remote server..."
+        ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} 'sudo mkdir -p /home/ec2-user/temp_wiremocks && sudo chown ec2-user:ec2-user temp_wiremocks'
+
+        echo "Uploading data directories (GRP1, GRP2, etc.) to the remote server..."
+        scp -r -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null wiremocks/data/* ec2-user@${dnsName}:/home/ec2-user/temp_wiremocks/
+        echo "Upload completed successfully."
+
+        ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} <<EOF
+
+        echo "Moving files from mappings directories..."
+        sudo find /home/ec2-user/temp_wiremocks -type f -path "*/mappings/*" -exec mv -t /home/ec2-user/wiremocks/mappings/ {} +
+
+        echo "Moving files from __files directories..."
+        sudo find /home/ec2-user/temp_wiremocks -type f -path "*/__files/*" -exec mv -t /home/ec2-user/wiremocks/__files/ {} +
+
+        echo "Cleaning up temporary upload directory..."
+        sudo rm -rf /home/ec2-user/temp_wiremocks
+        echo "Temporary directory cleaned up."
+EOF
+    """
+    echo "Mock files upload completed for DNS: ${dnsName}"
+}
+
+def restartWiremock(String dnsName) {
+    echo "Restarting Wiremock on DNS: ${dnsName}"
+    sh """
+        ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} sudo systemctl restart wiremock
+    """
+}
+
+def verifyWiremock(String dnsName) {
+    echo "Verifying Wiremock mappings endpoint on server ${dnsName} using localhost..."
+
+    int maxRetries = 5
+    int retryDelay = 3 // seconds
+    int attempt = 0
+    String wiremockStatus = ""
+
+    while (attempt < maxRetries) {
+        attempt++
+
+        echo "Attempt ${attempt}: Checking Wiremock mappings endpoint..."
+        try {
+            wiremockStatus = sh(script: """
+                ssh -i "${EC2_USER_KEY}" -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ec2-user@${dnsName} \
+                "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/__admin/mappings || echo ERROR"
+            """, returnStdout: true).trim()
+
+            echo "Wiremock Mappings Status Code: ${wiremockStatus}"
+
+            if (wiremockStatus == "200") {
+                echo "Wiremock mappings endpoint is reachable and responding."
+                return
+            } else if (wiremockStatus == "ERROR") {
+                echo "Curl command failed to execute on the server."
+            }
+        } catch (Exception e) {
+            echo "Exception occurred during SSH or curl execution: ${e.getMessage()}"
+        }
+
+        echo "Attempt ${attempt} failed. Retrying in ${retryDelay} seconds..."
+        sleep(retryDelay)
+    }
+
+    error "Wiremock mappings endpoint did not respond with a 200 status code after ${maxRetries} attempts. Last status code: ${wiremockStatus}"
+}
+
