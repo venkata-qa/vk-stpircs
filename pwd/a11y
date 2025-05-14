@@ -1,8 +1,0 @@
-Accessibility Data API Testing Documentation
-Overview
-This page documents the testing strategy, scenarios, and tools for the Accessibility Data API, which enables the automatic sharing of claimants’ accessibility needs across DWP services. This supports the business requirement to reduce manual workarounds and ensure compliance with the Public Sector Equality Duty (PSED).
-Test Objectives
-	•	Verify that updates to accessibility needs on a UC claim are automatically shared with all relevant DWP services via the API.
-	•	Ensure data integrity, security, and compliance throughout the data-sharing process.
-	•	Minimize the need for manual interventions (e.g., CIS 500 forms).
-Traceability Matrix
